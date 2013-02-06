@@ -3,6 +3,8 @@
 #
 
 
+from __future__ import unicode_literals
+
 from docutils import nodes
 from docutils.parsers.rst import Directive, directives
 from sphinx.util.osutil import copyfile
@@ -10,11 +12,25 @@ from pygments.lexer import RegexLexer
 from pygments.token import (Punctuation, Text, Operator, Name, String, Number,
         Comment)
 
+import sys
 import re
 import os, os.path
-from urllib2 import quote, urlopen, Request, HTTPError, URLError
 from cgi import escape
 from json import loads
+
+is_py3 = (sys.version_info >= (3,))
+
+if not is_py3:
+    from urllib2 import quote, urlopen, Request, HTTPError, URLError
+else:
+    from urllib.parse import quote
+    from urllib.request import Request, urlopen
+    from urllib.error import HTTPError, URLError
+
+try:
+    unicode
+except NameError:
+    unicode = str
 
 
 class HtsqlLexer(RegexLexer):
@@ -24,10 +40,10 @@ class HtsqlLexer(RegexLexer):
     filenames = ['*.htsql']
     mimetypes = ['text/x-htsql', 'application/x-htsql']
 
-    escape_regexp = re.compile(r'%(?P<code>[0-9A-Fa-f]{2})')
+    ascii_escape_regexp = re.compile(r'%(?P<code>[0-7][0-9A-Fa-f])')
 
     tokens = {
-        'root': [
+        str('root'): [
             (r'\s+', Text),
             (r'\#[^\r\n]*', Comment.Single),
             (r'\'(?:[^\']|\'\')*\'', String),
@@ -40,42 +56,38 @@ class HtsqlLexer(RegexLexer):
             (r'~|!~|<=|<|>=|>|==|=|!==|!=|'
              r'\^|\?|->|@|:=|!|&|\||\+|-|\*|/', Operator),
             (r'\(|\)|\{|\}|\.|,|:|;|\$', Punctuation),
-            (r'\[', Punctuation, 'identity'),
+            (r'\[', Punctuation, str('identity')),
         ],
-        'identity': [
+        str('identity'): [
             (r'\s+', Text),
-            (r'\(|\[', Punctuation, '#push'),
-            (r'\)|\]', Punctuation, '#pop'),
+            (r'\(|\[', Punctuation, str('#push')),
+            (r'\)|\]', Punctuation, str('#pop')),
             (r'\.', Punctuation),
             (r'[\w-]+', String),
             (r'\'(?:[^\']|\'\')*\'', String),
-            (r'\$', Punctuation, 'name'),
+            (r'\$', Punctuation, str('name')),
         ],
-        'name': [
+        str('name'): [
             (r'\s+', Text),
-            (r'\w+', Name.Builtin, '#pop'),
+            (r'\w+', Name.Builtin, str('#pop')),
         ],
     }
 
     def get_tokens_unprocessed(self, text):
-        octets = text.encode('utf-8')
         quotes = []
-        for match in self.escape_regexp.finditer(octets):
+        groups = []
+        for match in self.ascii_escape_regexp.finditer(text):
             quotes.append(match.start())
-        octets = self.escape_regexp.sub(lambda m: chr(int(m.group('code'), 16)),
-                                        octets)
-        try:
-            text = octets.decode('utf-8')
-        except UnicodeDecodeError:
-            quotes = []
+            groups.append(match.group())
+        text = self.ascii_escape_regexp.sub(
+                lambda m: chr(int(m.group('code'), 16)), text)
         token_stream = super(HtsqlLexer, self).get_tokens_unprocessed(text)
         pos_inc = 0
         for pos, token, value in token_stream:
             pos += pos_inc
             while quotes and pos <= quotes[0] < pos+len(value):
                 idx = quotes.pop(0)-pos
-                octets = value[idx].encode('utf-8')
-                repl = u''.join(u'%%%02X' % ord(octet) for octet in octets)
+                repl = groups.pop(0)
                 value = value[:idx]+repl+value[idx+1:]
                 pos_inc += len(repl)-1
             yield (pos, token, value)
@@ -127,11 +139,18 @@ class HTSQLDirective(Directive):
         if not hasattr(env, 'htsql_root') or not env.htsql_root:
             return [doc.reporter.error("config option `htsql_root`"
                                        " is not set", lineno=self.lineno)]
-        if 'output' not in self.options:
-            query = quote(query.encode('utf-8'),
-                          safe="~`!@$^&*()={[}]|:;\"'<,>?/")
+        if not is_py3:
+            if 'output' not in self.options:
+                query = quote(query.encode('utf-8'),
+                              safe="~`!@$^&*()={[}]|:;\"'<,>?/")
+            else:
+                query = self.options['output'].encode('utf-8')
         else:
-            query = self.options['output'].encode('utf-8')
+            if 'output' not in self.options:
+                query = quote(query,
+                              safe="~`!@$^&*()={[}]|:;\"'<,>?/")
+            else:
+                query = self.options['output']
         uri = env.htsql_root+query
         if 'no-link' not in self.options:
             query_node['uri'] = uri
@@ -221,12 +240,20 @@ def load_uri(uri, error=False):
         headers = { 'Accept': 'x-htsql/raw' }
         request = Request(uri, headers=headers)
         response = urlopen(request)
-        content_type = response.info().gettype()
+        info = response.info()
+        if hasattr(info, 'get_content_type'):
+            content_type = info.get_content_type()
+        else:
+            content_type = info.gettype()
         content = response.read()
-    except HTTPError, response:
+    except HTTPError as response:
         if not error:
             return None
-        content_type = response.headers.gettype()
+        info = response.info()
+        if hasattr(info, 'get_content_type'):
+            content_type = info.get_content_type()
+        else:
+            content_type = info.gettype()
         content = response.read()
     except URLError:
         return None
@@ -234,17 +261,17 @@ def load_uri(uri, error=False):
 
 
 def build_result(line, content_type, content, cut=None):
+    content = content.decode('utf-8', 'replace')
     if content_type == 'application/javascript':
         product = loads(content)
         if isinstance(product, dict) and 'meta' in product:
             return build_result_table(product, cut)
-    content = content.decode('utf-8', 'replace')
     if cut and content.count('\n') > cut:
         start = 0
         while cut:
             start = content.find('\n', start)+1
             cut -= 1
-        content = content[:start]+u"\u2026\n"
+        content = content[:start]+"\u2026\n"
     result_node = nodes.literal_block(content, content)
     result_node['language'] = 'text'
     return result_node
@@ -321,7 +348,7 @@ class MetaBuild(object):
         self.profile = profile
         self.header = profile.get('header')
         if not self.header:
-            self.header = u""
+            self.header = ""
         self.domain_build = get_build_by_domain(profile['domain'])
         self.span = self.domain_build.span
 
@@ -346,8 +373,8 @@ class MetaBuild(object):
         colspan = self.span
         classes = []
         if not self.header:
-            classes.append(u'htsql-dummy')
-        rows[0].append((self.header.replace(u" ", u"\xA0"),
+            classes.append('htsql-dummy')
+        rows[0].append((self.header.replace(" ", "\xA0"),
                         rowspan, colspan, classes))
         return rows
 
@@ -399,7 +426,7 @@ class ListBuild(object):
             return [[] for idx in range(height)]
         if not data:
             rows = [[] for idx in range(height)]
-            rows[0].append((u"", height, self.span, [u'htsql-dummy']))
+            rows[0].append(("", height, self.span, ['htsql-dummy']))
             return rows
         rows = []
         for idx, item in enumerate(data):
@@ -508,7 +535,7 @@ class ScalarBuild(object):
         rows = [[] for idx in range(height)]
         if not height:
             return rows
-        rows[0].append((u"", height, 1, [u'htsql-dummy']))
+        rows[0].append(("", height, 1, ['htsql-dummy']))
         return rows
 
     def body_height(self, data, cut):
@@ -518,20 +545,20 @@ class ScalarBuild(object):
         rows = [[] for idx in range(height)]
         if not height:
             return rows
-        classes = [u'htsql-%s-type' % self.domain['type']]
+        classes = ['htsql-%s-type' % self.domain['type']]
         if data is None:
-            classes.append(u'htsql-null-val')
-            data = u""
+            classes.append('htsql-null-val')
+            data = ""
         elif data is True:
-            classes.append(u'htsql-true-val')
-            data = u"true"
+            classes.append('htsql-true-val')
+            data = "true"
         elif data is False:
-            classes.append(u'htsql-false-val')
-            data = u"false"
+            classes.append('htsql-false-val')
+            data = "false"
         else:
             data = unicode(data)
             if not data:
-                classes.append(u'htsql-empty-val')
+                classes.append('htsql-empty-val')
         rows[0].append((data, height, 1, classes))
         return rows
 
@@ -539,8 +566,8 @@ class ScalarBuild(object):
         rows = [[] for idx in range(height)]
         if not height:
             return rows
-        classes = [u'htsql-%s-type' % self.domain['type'], u'htsql-cut']
-        rows[0].append((u"", height, 1, classes))
+        classes = ['htsql-%s-type' % self.domain['type'], 'htsql-cut']
+        rows[0].append(("", height, 1, classes))
         return rows
 
     def measures(self, data, cut):
@@ -553,8 +580,8 @@ def setup(app):
     app.add_config_value('htsql_root', None, 'env')
     app.add_directive('htsql-root', HTSQLRootDirective)
     app.add_directive('htsql', HTSQLDirective)
-    app.connect('env-purge-doc', purge_htsql_root)
-    app.connect('build-finished', copy_static)
+    app.connect(str('env-purge-doc'), purge_htsql_root)
+    app.connect(str('build-finished'), copy_static)
     app.add_node(htsql_block,
                  html=(visit_htsql_block, depart_htsql_block))
     app.add_stylesheet('htsql.css')
