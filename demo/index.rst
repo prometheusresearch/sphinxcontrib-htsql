@@ -17,7 +17,7 @@ The ``htsql`` directive takes a query as a parameter.
 Multiline query
 ---------------
 
-If a query spans many lines, it could be given as a content of the directive.
+If a query spans many lines, it could be written within the directive body.
 
 .. sourcecode:: rst
 

@@ -18,8 +18,7 @@ and released under BSD license.
 Usage
 =====
 
-To use this extension with your Sphinx website, add the following line
-to ``conf.py``::
+To enable this extension, add the following line to ``conf.py``::
 
     extensions.append('sphinxcontrib.htsql')
 
@@ -35,8 +34,8 @@ directive::
 This directive executes the query and inserts a composite block
 consisting of the query string and the query output in tabular form.
 
-If a query spans many lines, it could be given as a content of the
-directive::
+If a query spans many lines, it could be written within the directive
+body::
 
     .. htsql::
 
@@ -103,9 +102,9 @@ Directives
     This directive has no body and no options.
 
 ``htsql``
-    Inserts an output of an HTSQL query.
+    Inserts output of an HTSQL query.
 
-    The query could be specified as a parameter of the directive or (for
+    The query could be specified as the parameter of the directive or (for
     multi-line queries) as the directive content.
 
     This directive is rendered as a composite block with two entries:
@@ -118,8 +117,7 @@ Directives
     Options:
 
     ``output``
-        Render the output of a query different from the one specified
-        in the directive.
+        A query to use as a source for the output block.
 
     ``error``
         Accept invalid queries and render the error message in the
