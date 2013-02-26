@@ -1,7 +1,7 @@
 HTSQL Demo
 ==========
 
-This document demonstrate different options of the ``htsql`` directive.
+This document demonstrates different options of the ``htsql`` directive.
 
 Simple query
 ------------
