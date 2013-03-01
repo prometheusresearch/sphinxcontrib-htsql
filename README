@@ -9,7 +9,8 @@ Overview
 in Sphinx_ documents.
 
 You can see this extension in action at
-http://htsql.org/doc/overview.html#htsql-in-a-nutshell.
+http://htsql.org/doc/overview.html#htsql-in-a-nutshell.  For more
+examples, see ``demo`` directory in the source distribution.
 
 This software is written by Kirill Simonov (`Prometheus Research, LLC`_)
 and released under BSD license.
