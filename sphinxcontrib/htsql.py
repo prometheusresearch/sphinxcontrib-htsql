@@ -142,7 +142,7 @@ class HTSQLDirective(Directive):
         if not is_py3:
             if 'output' not in self.options:
                 query = quote(query.encode('utf-8'),
-                              safe="~`!@$^&*()={[}]|:;\"'<,>?/")
+                              safe=str("~`!@$^&*()={[}]|:;\"'<,>?/"))
             else:
                 query = self.options['output'].encode('utf-8')
         else:
