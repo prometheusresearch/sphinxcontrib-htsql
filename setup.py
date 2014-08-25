@@ -7,7 +7,7 @@ from setuptools import setup
 
 
 NAME = "sphinxcontrib-htsql"
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 DESCRIPTION = "HTSQL extension for Sphinx"
 LONG_DESCRIPTION = open('README').read()
 AUTHOR = "Kirill Simonov (Prometheus Research, LLC)"

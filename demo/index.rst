@@ -130,3 +130,6 @@ of lines.  This option works both with tabular and raw output.
 .. htsql:: /school
    :cut: 3
 
+.. htsql:: /{true, false, '', null}
+
+.. htsql:: /school

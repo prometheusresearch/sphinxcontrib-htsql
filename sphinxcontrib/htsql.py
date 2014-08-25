@@ -7,6 +7,7 @@ from __future__ import unicode_literals
 
 from docutils import nodes
 from docutils.parsers.rst import Directive, directives
+from sphinx import addnodes
 from sphinx.util.osutil import copyfile
 from pygments.lexer import RegexLexer
 from pygments.token import (Punctuation, Text, Operator, Name, String, Number,
@@ -220,6 +221,14 @@ def depart_htsql_block(self, node):
     self.depart_literal_block(node)
 
 
+def visit_literal_block(self, node):
+    self.visit_literal_block(node)
+
+
+def depart_literal_block(self, node):
+    self.depart_literal_block(node)
+
+
 def purge_htsql_root(app, env, docname):
     if hasattr(env, 'htsql_root'):
         del env.htsql_root
@@ -310,7 +319,6 @@ def build_result_table(product, cut):
                 entry_node += para_node
                 text_node = nodes.Text(cell)
                 para_node += text_node
-                #entry_node += text_node
     body_node = nodes.tbody()
     group_node += body_node
     body_rows = build.body(build.body_height(data, cut), data, cut)
@@ -328,8 +336,12 @@ def build_result_table(product, cut):
                 para_node = nodes.paragraph()
                 entry_node += para_node
                 text_node = nodes.Text(cell)
-                para_node += text_node
-                #entry_node += text_node
+                if any(cls in classes for cls in ['htsql-empty-val', 'htsql-null-val', 'htsql-cut']):
+                    only_node = addnodes.only(expr='latex or text')
+                    only_node += text_node
+                    para_node += only_node
+                else:
+                    para_node += text_node
     return table_node
 
 
@@ -548,7 +560,7 @@ class ScalarBuild(object):
         classes = ['htsql-%s-type' % self.domain['type']]
         if data is None:
             classes.append('htsql-null-val')
-            data = ""
+            data = "\xA0"
         elif data is True:
             classes.append('htsql-true-val')
             data = "true"
@@ -559,6 +571,7 @@ class ScalarBuild(object):
             data = unicode(data)
             if not data:
                 classes.append('htsql-empty-val')
+                data = "\xA0"
         rows[0].append((data, height, 1, classes))
         return rows
 
@@ -567,7 +580,7 @@ class ScalarBuild(object):
         if not height:
             return rows
         classes = ['htsql-%s-type' % self.domain['type'], 'htsql-cut']
-        rows[0].append(("", height, 1, classes))
+        rows[0].append(("\u2026", height, 1, classes))
         return rows
 
     def measures(self, data, cut):
@@ -583,7 +596,9 @@ def setup(app):
     app.connect(str('env-purge-doc'), purge_htsql_root)
     app.connect(str('build-finished'), copy_static)
     app.add_node(htsql_block,
-                 html=(visit_htsql_block, depart_htsql_block))
+                 html=(visit_htsql_block, depart_htsql_block),
+                 latex=(visit_literal_block, depart_literal_block),
+                 text=(visit_literal_block, depart_literal_block))
     app.add_stylesheet('htsql.css')
     app.add_lexer('htsql', HtsqlLexer())
 
